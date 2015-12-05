@@ -123,111 +123,161 @@ newline.
 
 =head2 sub open
 
-    my $fh = open(IO::Path() $path, :$r, :$w, :$a, :$rw,
-                  :$bin, :$enc, :$nl, :$chomp)
+    sub open(
+        IO() $path,
+        :$mode, :$create, :$append, :$truncate, :$exclusive,
+        :$r, :$w, :$x, :$a, :$update, :$rw, :$rx, :$ra,
+        :$bin, :$enc = 'utf8',
+        :$nl-in = ["\x0A", "\r\n"], :$nl-out = "\n", :$chomp = True
+    --> IO::Handle)
 
-Opens the C<$path> (by default in text mode) with the given options,
-returning an L<IO::Handle> object.
+Opens a C<$path> using the given options, returning an L<IO::Handle> object.
+The path C<"-"> will return the standard input stream if a read-only file
+mode has been selected, or the standard output stream in case of a write-only
+file mode.
 
-=head3 File mode options
+=head3 Low-level file mode options
 
-=item read-only mode, C<:r>
+    my $fh = open("path/to/file", :mode<wo>, :create);
 
-Open the file as read only, e.g.:
+The low-level file modes are the building blocks for all other supported
+file modes and correspond to a subset of the flags specified by POSIX.
 
-    my $fh = open("path/to/file", :r);
+The high-level modes should cover most common use cases and using the
+low-level ones should rarely be necessary.
 
-This is the default mode for C<open>.
+=item C<:mode<ro>> - read-only mode, equivalent to POSIX C<O_RDONLY>
+=item C<:mode<wo>> - write-only mode, equivalent to POSIX C<O_WRONLY>
+=item C<:mode<rw>> - read-write mode, equivalent to POSIX C<O_RDWR>
+=item C<:create> - creation mode, equivalent to POSIX C<O_CREAT>
+=item C<:append> - append mode, equivalent to POSIX C<O_APPEND>
+=item C<:truncate> - truncation mode, equivalent to POSIX C<O_TRUNC>
+=item C<:exclusive> - exclusive mode, equivalent to POSIX C<O_EXCL>
 
-Write-related methods on the returned C<IO::Handle> object will fail in this
-mode:
+=head3 High-level file mode options
 
-    my $fh = open("test");   # the file "test" already exists
-    spurt $fh, "new text\n";
-    Failed to write bytes to filehandle: bad file descriptor
+    my $in  = open("in.txt"); # defaults to :r
+    my $out = open("out.txt", :w);
 
-=item write-only mode, C<:w>
+These are the modes you will likely use most often.
 
-Open the file for writing, creating it if it doesn't exist or overwriting
-the file if it does exist, e.g.:
+=begin item
+C<:r> - open preexisting file for reading
 
-    my $fh = open("path/to/file", :w);
+Same as C<:mode<ro>>. This is the default.
+=end item
 
-Read-related methods will fail in this mode:
+=begin item
+C<:w> - create new file for writing or overwrite preexisting one
 
-    my $fh = open("test", :w);
-    spurt $fh, "stuff\n";
-    spurt $fh, "more stuff\n";
-    $fh.seek(0, 0);   # return to the start of the file
-    $fh.get();        # Reading from filehandle failed: bad file descriptor
+Same as C<:mode<wo>, :create, :truncate>.
+=end item
 
-=item read-write mode, C<:rw>
+=begin item
+C<:x> - create new file for writing
 
-Open the file for reading and writing, creating the file if it doesn't
-exist or overwriting the file if it already exists.
+Same as C<:mode<wo>, :create, :exclusive>. Fails if the file already exists.
+=end item
 
-    my $fh = open("path/to/file", :w);
+=begin item
+C<:a> - create new file or open preexisting one for appending
 
-=item append mode, C<:a>
+Same as C<:mode<wo>, :create, :append>.
+=end item
 
-Open the file for appending.  If the file does not exist, create it.  If the
-file already exists, append data to it.
+=begin item
+C<:update> - open preexisting file for reading and writing
 
-    my $fh = open("path/to/file", :a);
+Same as C<:mode<rw>>.
+=end item
+
+=begin item
+C<:rw> - create new file or open preexisting one for reading and writing
+
+Same as C<:mode<rw>, :create>. Can also be written as C<:r, :w>
+=end item
+
+=begin item
+C<:rx> - create new file for reading and writing
+
+Same as C<:mode<rw>, :create, :exclusive>. Can also be written as C<:r, :x>.
+=end item
+
+=begin item
+C<:ra> - create new file or open preexisting one for reading and appending
+
+Same as C<:mode<rw>, :create, :append>. Can also be written as C<:r, :a>.
+=end item
 
 =head3 Encoding options
 
-=item binary mode, C<:bin>
-
-Open the file in binary mode (byte mode):
-
+    # open binary file
     my $fh = open("path/to/file", :bin);
-
-A file opened with C<:bin> may still be processed line-by-line, but IO will
-be in terms of L<Buf|/type/Buf> rather than L<Str|/type/Str> types.  Default
-is C<False>, implying text semantics.
-
-=item text mode encoding, C<:enc>
-
-The encoding to use if opened in text mode.
-
-    # open explicitly as utf8
-    my $fh = open("path/to/file", enc => "utf8");
-    my $fh = open("path/to/file", enc => "utf-8");  # this form also works
+    $fh.get; # returns a Blob[uint8] instead of a Str
     # open with latin1 encoding
     my $fh = open("path/to/file", enc => "latin1");
 
-Defaults to "Unicode", which implies figuring out which actual UTF is in
-use, either from a BOM or other heuristics.  If heuristics are inconclusive,
-UTF-8 will be assumed.  (No 8-bit encoding will ever be picked implicitly.)
-There exists no valid option with the name "Unicode", so the following will
-result in an error:
+=begin item
+C<:bin> - binary file mode
 
-    my $fh = open("path/to/file", enc => "Unicode");
+A file opened with C<:bin> may still be processed line-by-line, but IO will
+be in terms of L<Blob|/type/Blob> rather than L<Str|/type/Str> types. Defaults
+to C<False>, implying text semantics.
+=end item
 
-This is because one needs to specify a specific unicode encoding, e.g.
-"utf8".
+=begin item
+C<<enc => "...">> - text file mode using given encoding
+
+The list of suported encodings includes (but is not necessarily restricted
+to) C<utf8>, C<utf16>, C<ascii>, C<latin1>, C<windows-1252>. Defaults to
+C<utf8>.
+=end item
 
 =head3 Newline options
 
-=item end-of-line (EOL) marker, C<:nl>
-
-The marker used to indicate the end of a line of text.  Only used in text
-mode.  Defaults to "EOL", which implies accepting any combination of C<"\n">,
-C<"\r\n"> or C<"\r"> or any other Unicode character that has the C<Zl>
-(Separator, Line) property.
-
     # explicitly use CR-LF as EOL character
-    my $fh = open("path/to/file", nl => "\r\n");
+    my $fh = open("path/to/file", nl-in => "\r\n");
+    # don't remove newline characters from input
+    my $fh = open("path/to/file", :!chomp);
+    say $fh.get();     # returns line including newline char
 
-=item chomp mode, C<:chomp>
+=begin item
+C<<nl-in => [...]>> - input line separators
+=end item
+
+=begin item
+C<<nl-out => "...">> - output line separator
+=end item
+
+=begin item
+C<:chomp> - chomp mode
 
 Whether or not to remove newline characters from text obtained with
-C<.lines> and C<.get>.  Defaults to C<True>.
+C<.lines> and C<.get>. Defaults to C<True>.
+=end item
 
-    # don't remove newline characters from input
-    my $fh = open("path/to/file", chomp => False);
-    say $fh.get();     # returns line including newline char
+=head3 Equivalent C 11 and Perl 5 file modes
+
+Perl 6 supports all modes available for C<fopen(3)> as specified by the 2011
+revision of the C standard. This includes all modes supported by Perl 5.
+
+The set of primitives provided by Perl 6 differs from its C 11 counterpart.
+In particular, the only mode that may overwrite preexisting files implicitly
+is C<:w>.
+
+=begin code :allow<B I>
+      B<C 11>  | B<Perl 5> |      B<Perl 6>
+    ========|========|==================
+      "r"   |  "<"   |  :r
+      "w"   |  ">"   |  :w
+      "wx"  |  I<n/a>   |  :x
+      "a"   |  ">>"  |  :a
+      "r+"  |  "+<"  |  :update
+      I<n/a>   |  I<n/a>   |  :rw
+      "w+"  |  "+>"  |  :rw, :truncate
+      "w+x" |  I<n/a>   |  :rx
+      "a+"  |  "+>>" |  :ra
+=end code
 
 =head2 method close
 
