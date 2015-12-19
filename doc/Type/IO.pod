@@ -138,7 +138,11 @@ file mode.
 
 =head3 Low-level file mode options
 
-    my $fh = open("path/to/file", :mode<wo>, :create);
+    # open file in write-only mode and overwrite preexisting files
+    my $fh = open("path/to/file", :mode<wo>, :create, :truncate);
+
+    # open file in read-write mode and fail if the file already exists
+    my $fh = open("path/to/file", :mode<rw>, :create, :exclusive);
 
 The low-level file modes are the building blocks for all other supported
 file modes and correspond to a subset of the flags specified by POSIX.
@@ -146,20 +150,59 @@ file modes and correspond to a subset of the flags specified by POSIX.
 The high-level modes should cover most common use cases and using the
 low-level ones should rarely be necessary.
 
-=item C<:mode<ro>> - read-only mode, equivalent to POSIX C<O_RDONLY>
-=item C<:mode<wo>> - write-only mode, equivalent to POSIX C<O_WRONLY>
-=item C<:mode<rw>> - read-write mode, equivalent to POSIX C<O_RDWR>
-=item C<:create> - creation mode, equivalent to POSIX C<O_CREAT>
-=item C<:append> - append mode, equivalent to POSIX C<O_APPEND>
-=item C<:truncate> - truncation mode, equivalent to POSIX C<O_TRUNC>
-=item C<:exclusive> - exclusive mode, equivalent to POSIX C<O_EXCL>
+=begin item
+C<:mode<ro>> - read-only mode
+
+Equivalent to POSIX C<O_RDONLY>.
+=end item
+
+=begin item
+C<:mode<wo>> - write-only mode
+
+Equivalent to POSIX C<O_WRONLY>.
+=end item
+
+=begin item
+C<:mode<rw>> - read-write mode
+
+Equivalent to POSIX C<O_RDWR>.
+=end item
+
+=begin item
+C<:create> - creation mode
+
+Equivalent to POSIX C<O_CREAT>.
+=end item
+
+=begin item
+C<:append> - append mode
+
+Equivalent to POSIX C<O_APPEND>.
+=end item
+
+=begin item
+C<:truncate > - truncation mode
+
+Equivalent to POSIX C<O_TRUNC>.
+=end item
+
+=begin item
+C<:exclusive> - exclusive mode
+
+Equivalent to POSIX C<O_EXCL>.
+=end item
 
 =head3 High-level file mode options
 
-    my $in  = open("in.txt"); # defaults to :r
-    my $out = open("out.txt", :w);
+    # open file for reading
+    my $fh = open("in.txt");
+    my $fh = open("in.txt", :r); # same as above
 
-These are the modes you will likely use most often.
+    # open file for writing
+    my $fh = open("out.txt", :w);
+
+These are the modes you will likely use most often. The only high-level mode
+that truncates preexisting files implicitly is C<:w>.
 
 =begin item
 C<:r> - open preexisting file for reading
@@ -211,11 +254,20 @@ Same as C<:mode<rw>, :create, :append>. Can also be written as C<:r, :a>.
 
 =head3 Encoding options
 
-    # open binary file
+    # open text file with latin1 encoding
+    my $fh = open("path/to/file", enc => "latin1");
+
+    # open binary file for byte-based line-by-line access
     my $fh = open("path/to/file", :bin);
     $fh.get; # returns a Blob[uint8] instead of a Str
-    # open with latin1 encoding
-    my $fh = open("path/to/file", enc => "latin1");
+
+A file can be opened either in text mode with a given encoding, or in binary 
+mode. Currently, binary mode is implemented via the special encoding 
+C<"utf8-c8">, but this may change in the future and should not be relied on.
+
+Note that byte-based methods like L<read|/type/IO::Handle#method_read> and
+L<write|/type/IO::Handle#method_write> are available even on files opened in
+text mode.
 
 =begin item
 C<:bin> - binary file mode
@@ -226,7 +278,7 @@ to C<False>, implying text semantics.
 =end item
 
 =begin item
-C<<enc => "...">> - text file mode using given encoding
+C<<enc => "???">> - text file mode using given encoding
 
 The list of suported encodings includes (but is not necessarily restricted
 to) C<utf8>, C<utf16>, C<ascii>, C<latin1>, C<windows-1252>. Defaults to
@@ -235,18 +287,22 @@ C<utf8>.
 
 =head3 Newline options
 
-    # explicitly use CR-LF as EOL character
+    # only accept CR-LF as input line separator
     my $fh = open("path/to/file", nl-in => "\r\n");
-    # don't remove newline characters from input
+
+    # use CR-LF as output line separator
+    my $fh = open("path/to/file", :w, nl-out => "\r\n");
+
+    # don't remove line separators from input
     my $fh = open("path/to/file", :!chomp);
-    say $fh.get();     # returns line including newline char
+    say $fh.get(); # returns line including newline char
 
 =begin item
 C<<nl-in => [...]>> - input line separators
 =end item
 
 =begin item
-C<<nl-out => "...">> - output line separator
+C<<nl-out => "???">> - output line separator
 =end item
 
 =begin item
